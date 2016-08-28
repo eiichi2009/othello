@@ -345,8 +345,6 @@ void move(int teban)
 
 int main(int ac, char **av)
 {
-  cout << "moritan othello ver 6.1, 1986" << endl;
-
   set_ban();
 
   int teban = 0;
