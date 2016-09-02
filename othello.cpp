@@ -1,10 +1,17 @@
 #include <iostream>
+#include <cstdint>
+#include <stack>
+
 #include "othello.hpp"
 
 using namespace std;
 
+void mr2(CELL *p, int tesu, int beta);
+
 char ban[91];
 int te;
+char *open_space_list[61];
+stack<uint64_t> stk;
 
 void set_ban()
 {
@@ -20,6 +27,19 @@ void set_ban()
 
   ban[D4] = ban[E5] = WHITE;
   ban[E4] = ban[D5] = BLACK;
+
+  // white
+  ban[E4] = ban[D5] = WHITE;
+  ban[C1] = ban[D1] = ban[E1] = ban[F1] = WHITE;
+  ban[A2] = ban[C2] = ban[D2] = ban[E2] = ban[F2] = WHITE;
+  ban[B3] = ban[D3] = ban[E3] = ban[F3] = ban[G3] = ban[H3] = WHITE;
+  ban[C4] = ban[D4] = ban[E4] = ban[F4] = ban[G4] = ban[H4] = WHITE;
+  ban[B5] = ban[D5] = ban[E5] = ban[F5] = ban[G5] = ban[H5] = WHITE;
+  ban[A6] = ban[B6] = ban[C6] = ban[E6] = ban[F6] = ban[G6] = ban[H6] = WHITE;
+  ban[C7] = ban[D7] = ban[F7] = ban[G7] = WHITE;
+  ban[C8] = ban[D8] = ban[H8] = WHITE;
+
+  ban[C3] = ban[B4] = ban[A5] = ban[C5] = ban[D6] = ban[E7] = ban[F8] = BLACK;
 }
   
 void disp_ban()
@@ -87,6 +107,13 @@ void init_cell()
   mycell[MAXCELL-1].cdr = NULL;
   myfree = mycell;
   nc = MAXCELL;
+}
+
+CELL *get_cell()
+{
+  CELL *p = myfree;
+  myfree = p->cdr;
+  return p;
 }
 
 int uscan3(char *bp, int vec)
@@ -158,41 +185,50 @@ int isable2(char *bp)
   }
 } 
 
-void com()
+void mkchild1(CELL *p)
 {
-  int kuusho = 0;
-
-  if (te) {
-    return;
-  }
-
-  char **a;
+  CELL ltop;
+  CELL *p1 = &ltop;
   char *bp;
-  for (int i = 0; i < 60; ++i) {
-    bp = ban + yusen[i];
-    if (*bp == BLANK) {
-      *a = bp;
-      a++;
-      kuusho++;
+  for (char **ap = open_space_list; *ap; ap++) {
+    bp = *ap;
+    if (*bp != BLANK) {
+      continue;
     }
-  }
-  *a = 0;
-  sekisa = 0;
-  for (int i = 0; i <= 8; ++i) {
-    for (int j = 0; j <= 8; ++j) {
-      if (ban[i*9 + j] == BLACK) {
-	sekisa++;
-      }
-      else if (ban[i*9 + j] == WHITE) {
-	sekisa--;
-      }
+
+    if (isable1(bp)) {
+      p1 = p1->cdr = get_cell();
+      p1->child = NULL;
+      p1->t = bp - ban;
     }
   }
 
-  init_cell();
+  p1->cdr = NULL;
 
-}    
+  if (ltop.cdr) {
+    p->child = ltop.cdr;
+  }
+  else {
+    p1 = p->child = get_cell();
+    p1->child = NULL;
+    p1->cdr = NULL;
+    p1->t = 0;
+  }
 
+  return;
+}
+
+void print_cell(CELL *p)
+{
+  cout << "printing cell" << endl;
+  cout << "self = " << p << endl;
+  cout << "*child = " << p->child << endl;
+  cout << "*cdr = " << p->cdr << endl;
+  char c = p->t % 9 + 96;
+  char n = p->t / 9 + 48;
+  cout << "t = " << c << n << endl;
+  cout << "h = " << p->h << endl;
+}
 
 int stat()
 {
@@ -227,6 +263,55 @@ int stat()
   }
 }
 
+void com()
+{
+  int open_space = 0;
+
+  char **a = open_space_list;
+  char *bp;
+  for (int i = 0; i < 60; ++i) {
+    bp = ban + yusen[i];
+    if (*bp == BLANK) {
+      *a = bp;
+      a++;
+      open_space++;
+    }
+  }
+  *a = 0;
+  sekisa = 0;
+  for (int i = 0; i <= 8; ++i) {
+    for (int j = 0; j <= 8; ++j) {
+      if (ban[i*9 + j] == BLACK) {
+	sekisa++;
+      }
+      else if (ban[i*9 + j] == WHITE) {
+	sekisa--;
+      }
+    }
+  }
+
+  init_cell();
+
+  CELL *p = get_cell();
+  p->child = NULL;
+  p->cdr = NULL;
+
+  if (open_space <= 16) {
+    p->h = -64;
+    mr2(p, open_space, 64); // perfect read
+  }
+#if 0
+  else {
+    int search_depth = 4;
+    p->h = -10000;
+    //    mr1(p, open_space, 10000); // general read
+  }
+#endif
+  te = p->t;
+
+  return;
+}    
+
 int uscan1(char *bp, int vec)
 {
   bp += vec;
@@ -239,11 +324,13 @@ int uscan1(char *bp, int vec)
     return 0;
   }
 
-  int n = num;
+  int rev = num;
   bp -= vec;
-  while (n) {
+  while (rev) {
     *bp = BLACK;
-    n--;
+    stk.push((uint64_t)bp);
+    bp -= vec;
+    rev--;
   }
 
   return num;  
@@ -261,11 +348,13 @@ int uscan2(char *bp, int vec)
     return 0;
   }
 
-  int n = num;
+  int rev = num;
   bp -= vec;
-  while (n) {
+  while (rev) {
     *bp = WHITE;
-    n--;
+    stk.push((uint64_t)bp);
+    bp -= vec;
+    rev--;
   }
 
   return num;  
@@ -286,7 +375,30 @@ int put1(char *bp)
   }
 
   *bp = BLACK;
+
+  sekisa += turn + turn + 1;
+  stk.push((uint64_t)bp);
+  stk.push((uint64_t)turn);
+  
   return turn;
+}
+
+void tup1()
+{
+  int turn = (int)stk.top();
+  stk.pop();
+  char *bp = (char *)stk.top();
+  stk.pop();
+
+  sekisa -= turn + turn + 1;
+  *bp = BLANK;
+
+  while (turn) {
+    bp = (char *)stk.top();
+    stk.pop();
+    *bp = WHITE;
+    turn--;
+  }
 }
 
 int put2(char *bp)
@@ -306,6 +418,117 @@ int put2(char *bp)
   *bp = WHITE;
   return turn;
 }
+
+void tup2()
+{
+  int turn = (int)stk.top();
+  stk.pop();
+  char *bp = (char *)stk.top();
+  stk.pop();
+
+  sekisa -= turn + turn + 1;
+  *bp = BLANK;
+
+  while (turn) {
+    bp = (char *)stk.top();
+    stk.pop();
+    *bp = BLACK;
+    turn--;
+  }
+}
+
+int eval1()
+{
+  int hyo = 0;
+  for (int row = 1; row <= 8; ++row) {
+    for (int col = 1; col <= 8; ++col) {
+      int loc = row + col*9;
+      int sign = 0;
+      if (ban[loc] == BLACK) {
+	hyo++;
+	sign = 1;
+      }
+      else if (ban[loc] == WHITE) {
+	hyo--;
+	sign = -1;
+      }
+      else {
+	continue;
+      }
+      
+      if (row == 1 || row == 8 || col == 1 || col == 8) {
+	hyo += sign * 2;
+      }
+
+      if ((row == 1 && col == 1) ||
+	  (row == 1 && col == 8) ||
+	  (row == 8 && col == 1) ||
+	  (row == 8 && col == 8)) {
+	hyo += sign * 4;
+      }
+    }
+  }
+  
+  return hyo;
+}
+
+int eval2()
+{
+  rev_ban();
+  int hyo = eval1();
+  rev_ban();
+  return -hyo;
+}
+
+void sort(CELL *p)
+{
+  int cnt = 0;
+  for (CELL *cur = p->child; cur; cur = cur->cdr) {
+    cnt++;
+  }
+  if (cnt == 1) {
+    return;
+  }
+  
+  while (cnt) {
+    CELL *p1 = p->child;
+    CELL *p2 = p->child->cdr;
+    while (p2) {
+      if (p1->h < p2->h) {
+	int h = p1->h;
+	int t = p1->t;
+	p1->h = p2->h;
+	p1->t = p2->t;
+	p2->h = h;
+	p2->t = t;
+      }
+
+      p1 = p2;
+      p2 = p2->cdr;
+    }
+    cnt--;
+  }
+}
+
+void mr2(CELL *p, int tesu, int beta)
+{
+  mkchild1(p);
+
+  for (CELL *son = p->child; son; son = son->cdr) {
+    put1(son->t + ban);
+    son->h = eval2();
+    tup1();
+  }
+
+  sort(p);
+
+  p->t = p->child->t;
+  
+  for (CELL *son = p->child; son; son = son->cdr) {
+    son->h = beta;
+  }
+}
+
 
 #define TEBAN_BLACK 0
 #define TEBAN_WHITE 1
